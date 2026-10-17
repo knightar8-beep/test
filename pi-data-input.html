@@ -1077,7 +1077,7 @@
         <div class="card" id="st_cloud"><h3>☁ Cloud Sync — Google Apps Script Connection</h3>
           <p class="st-note">The Web App address and secret key that connect this system to your Google Sheet. They are saved in <b>this browser</b> only and are never shown to other users. Use <b>Test Connection</b> after changing them.</p>
           <div class="st-grid" style="grid-template-columns:1fr 1fr">
-            <div><label class="st-lbl">Apps Script Web App URL</label><input class="st-in" id="st_url" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" spellcheck="false"></div>
+            <div><label class="st-lbl">Apps Script Web App </label><input class="st-in" id="st_" placeholder="https://script.google.com/macros/s/.../exec" autocomplete="off" spellcheck="false"></div>
             <div><label class="st-lbl">Secret Key <small>(optional — only needed if you set SECRET_KEY in Code.gs)</small></label><div style="position:relative"><input class="st-in" id="st_key" type="password" autocomplete="new-password" spellcheck="false" style="padding-right:64px"><button type="button" id="st_keyShow" style="position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:#6b7a99;font-weight:700;cursor:pointer;padding:8px 10px">Show</button></div></div>
           </div>
           <div class="st-btns" style="margin-top:4px"><button class="st-b" id="st_ctest" type="button">🔎 Test Connection</button><button class="st-b" id="st_csave" type="button">💾 Save</button></div>
@@ -2141,8 +2141,8 @@
   // button to override without editing the file each time. Since this page
   // reloads fresh every time it's reopened, edit these two constants below
   // if you want your own URL/key to load in automatically every time.
-  var DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyNwnqIwc6aeI6SFOpDmCioC3stNQKTj3_p1stGUkDFCGZN726hc1-rVx9V52f9m_rX/exec';
-  var DEFAULT_SECRET_KEY = '';   // intentionally empty: the signed-in token protects the server; never put the secret key in this file
+  var DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyL58b8FnzVNe3JC-br9muND3vO4_D3zz1F6OHTM1yRT_W9Xj7v5Si_BU8uVu6mQw/exec';
+  var DEFAULT_SECRET_KEY = 'CCPLC_LC_Tracker_2026_X7k9P2mQ8R4T';   // intentionally empty: the signed-in token protects the server; never put the secret key in this file
   var RUNTIME_CONFIG = { appsScriptUrl: DEFAULT_APPS_SCRIPT_URL, secretKey: DEFAULT_SECRET_KEY };
   // The URL/key you enter under ☁ Cloud Sync are remembered in THIS browser, so they survive a reload
   // (a new Apps Script deployment gets a new URL — you only have to paste it once).
