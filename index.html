@@ -2690,9 +2690,14 @@ select.dc-st{border:0;border-radius:99px;padding:5px 10px;font:700 12px inherit;
           <div class="file-row"><input type="file" id="ackIns_fileAckDoc" accept=".pdf,.jpg,.jpeg,.png"><span class="file-hint">PDF, JPG, PNG (Max 10MB)</span></div>
         </div>
       </div>
+      <div id="ackInsQueueWrap" style="display:none;margin-top:14px;">
+        <div style="font-weight:700;margin-bottom:6px;">Entries added to the list — <span id="ackInsQueueCount">0</span> <span style="font-weight:400;color:var(--muted);">(saved and sent to the factory when you click Save)</span></div>
+        <div class="table-wrap"><table><thead><tr><th>LC No.</th><th>Month</th><th>Cover Note No.</th><th>Cover Note Date</th><th>Insurance Sent</th><th>LC Advice Sent</th><th></th></tr></thead><tbody id="ackInsQueueBody"></tbody></table></div>
+      </div>
       <div class="calc-hint" style="margin:10px 0 0;">An entry can be an <b>Insurance Cover Note</b> (Cover Note No.), a <b>LC Opening Advice</b> (LC OPENING ADVICE SND TO FACTORY DT), or both. The LC OPENING ADVICE SND TO FACTORY DT starts as today’s date — <b>clear it for an Insurance-Cover-Note-only entry</b>. The factory enters the Acknowledgement Dates and “Acknowledged By” in its own app.</div>
     </div>
     <div class="modal-footer">
+      <button class="btn btn-white" id="ackInsModalAdd" type="button">➕ Add to List</button>
       <button class="btn btn-white" id="ackInsModalCancel" type="button">Cancel</button>
       <button class="btn btn-blue" id="ackInsModalSave" type="button">💾 Save Entry</button>
     </div>
@@ -2758,7 +2763,7 @@ select.dc-st{border:0;border-radius:99px;padding:5px 10px;font:700 12px inherit;
   // button to override without editing the file each time. Since this page
   // reloads fresh every time it's reopened, edit these two constants below
   // if you want your own URL/key to load in automatically every time.
-  var DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwjPTgol9rgDmUeguNoFxr6v_rCTleHkPzp0uVczePmFp0_faVURlmcjXDzYgNuQn3v/exec';
+  var DEFAULT_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzQkD0BVuwPb4e3VAvWhqB2tfYaTPvRs_Kt9FEXcbji_0EVPxQwUpEOCGDNM4JCKtD1/exec';
   var DEFAULT_SECRET_KEY = '';   // intentionally empty: the signed-in token protects the server; never put the secret key in this file
   var RUNTIME_CONFIG = { appsScriptUrl: DEFAULT_APPS_SCRIPT_URL, secretKey: DEFAULT_SECRET_KEY };
   // The URL/key you enter under ☁ Cloud Sync are remembered in THIS browser, so they survive a reload
@@ -7170,7 +7175,7 @@ select.dc-st{border:0;border-radius:99px;padding:5px 10px;font:700 12px inherit;
     if(!base){ setVal('ackIns_lcNo', ''); if(ref) ref.value = lc ? 'LC not found — pick one from the list' : ''; ackInsResetEntryFields(); ackInsModalMonthUpdate(); return; }
     setVal('ackIns_lcNo', lc); setVal('ackIns_piNo', base.piNo || ''); setVal('ackIns_unit', base.unit || val('ackIns_unitSel')); setVal('ackIns_commodity', base.item || ''); setVal('ackIns_supplier', base.insCompany || '');
     if(ref) ref.value = [base.piNo || '—', base.unit || val('ackIns_unitSel') || '—', base.insCompany || '—', base.month || ''].join('   ·   ');
-    var coverNo = base.coverNoteNo || base.monthCoverNoteNo || '', coverDt = base.coverNoteDate || base.monthCoverNoteDate || '';
+    var coverNo = base.monthCoverNoteNo || base.coverNoteNo || '', coverDt = base.monthCoverNoteDate || base.coverNoteDate || '';   // the Cover Note recorded for this LC on the Insurance page
     function carryCover(){ if(val('ackIns_lcNo') === lc && !ackInsEntryId && !val('ackIns_coverNoteNo')){ setVal('ackIns_coverNoteNo', coverNo); setVal('ackIns_coverNoteDate', coverDt); ackInsModalMonthUpdate(); } }
     if(row && row.entryId){
       ackInsFillFromEntry(row);
@@ -7178,8 +7183,7 @@ select.dc-st{border:0;border-radius:99px;padding:5px 10px;font:700 12px inherit;
     } else {
       ackInsResetEntryFields();
       setVal('ackIns_lcAdvSendDate', ackToday());   // new entry: LC OPENING ADVICE SND TO FACTORY DT = today (clear it for a cover-note-only entry)
-      if(inRows.length){ if(!inRows.some(function(r){ return r.entryId; })) carryCover(); }   // first entry of this LC: the Cover Note from the Insurance page
-      else backendCall({ action: 'listAckEntries', lcNo: lc }).then(function(r){ if(r && r.success && !(r.entries || []).length) carryCover(); }).catch(function(){});
+      carryCover();   // Insurance Cover Note No. and Cover Note Date fill in as soon as the LC is selected
     }
     ackInsModalMonthUpdate();
   }
@@ -7189,22 +7193,92 @@ select.dc-st{border:0;border-radius:99px;padding:5px 10px;font:700 12px inherit;
     li.value = row ? row.lcNo : ''; li.disabled = !!row;
     ackInsPickLc(li.value, row || null);
     document.getElementById('ackInsModalTitle').textContent = (row && row.entryId) ? ('Edit Entry #' + (row.seq || '')) : 'New Entry';
+    var addB = document.getElementById('ackInsModalAdd'); if(addB) addB.style.display = row ? 'none' : '';   // editing one entry: no list
+    ackInsQueue = []; ackInsRenderQueue();
     ackInsModalEl.classList.add('open');
     if(!row) setTimeout(function(){ li.focus(); }, 50);
   }
+  // ---- "Add to List": several entries (any LCs) are lined up in the popup and saved + sent together ----
+  var ackInsQueue = [];
+  function ackInsMonthOfLc(lc){ var l = ackInsAllLcs.filter(function(x){ return x.lcNo === lc; })[0] || ackInsRows.filter(function(x){ return x.lcNo === lc; })[0]; return (l && l.month) || ''; }
+  function ackInsCollectEntry(){
+    var lc = val('ackIns_lcNo'), cn = val('ackIns_coverNoteNo'), adv = val('ackIns_lcAdvSendDate');
+    if(!lc) return { error: 'Pick an LC No. first' };
+    if(!val('ackIns_unit')) return { error: 'Unit is required — pick an LC whose PI has a Unit' };
+    if(!cn && !adv) return { error: 'Enter an Insurance Cover Note No. and/or the LC OPENING ADVICE SND TO FACTORY DT — an entry needs at least one of them' };
+    var files = []; [['ackIns_fileCoverNote', 'Insurance Cover Note'], ['ackIns_fileAckDoc', 'Insurance Cover Note ACK']].forEach(function(sp){ var el = cg(sp[0]); if(el && el.files) Array.prototype.forEach.call(el.files, function(f){ files.push({ file: f, docName: sp[1] }); }); });
+    return { entry: { id: '', lcNo: lc, piNo: val('ackIns_piNo'), unit: val('ackIns_unit'), coverNoteNo: cn, coverNoteDate: val('ackIns_coverNoteDate'), insSentDate: val('ackIns_receivedDate') || ackToday(), lcAdvSendDate: adv, ackBy: val('ackIns_ackBy'), remarks: val('ackIns_remarks') },
+      files: files, item: val('ackIns_commodity'), month: ackInsMonthOfLc(lc) };
+  }
+  function ackInsRenderQueue(){
+    var wrap = document.getElementById('ackInsQueueWrap'), body = document.getElementById('ackInsQueueBody'); if(!wrap || !body) return;
+    wrap.style.display = ackInsQueue.length ? '' : 'none';
+    document.getElementById('ackInsQueueCount').textContent = ackInsQueue.length;
+    body.innerHTML = ackInsQueue.map(function(q, i){ var e = q.entry;
+      return '<tr><td>' + escapeHtml(e.lcNo) + '</td><td>' + escapeHtml(q.month || '--') + '</td><td>' + escapeHtml(e.coverNoteNo || '--') + '</td><td>' + escapeHtml(e.coverNoteDate || '--') + '</td><td>' + escapeHtml(e.coverNoteNo ? e.insSentDate : '--') + '</td><td>' + escapeHtml(e.lcAdvSendDate || '--') + '</td><td><button class="icon-btn danger" data-ackq-del="' + i + '" type="button" title="Remove from the list">✕</button></td></tr>'; }).join('');
+    body.querySelectorAll('[data-ackq-del]').forEach(function(b){ b.addEventListener('click', function(){ ackInsQueue.splice(+b.getAttribute('data-ackq-del'), 1); ackInsRenderQueue(); }); });
+    var sv = document.getElementById('ackInsModalSave'); if(sv) sv.textContent = ackInsQueue.length ? '💾 Save ' + ackInsQueue.length + (ackInsQueue.length === 1 ? ' Entry' : ' Entries') : '💾 Save Entry';
+  }
+  function ackInsClearPopupForm(){
+    var li = document.getElementById('ackInsModalLc'); if(li) li.value = '';
+    ['ackIns_lcNo', 'ackIns_piNo', 'ackIns_unit', 'ackIns_commodity', 'ackIns_supplier'].forEach(function(id){ setVal(id, ''); });
+    var ref = document.getElementById('ackInsModalRef'); if(ref) ref.value = '';
+    ['ackIns_fileCoverNote', 'ackIns_fileAckDoc'].forEach(function(id){ var el = cg(id); if(el) el.value = ''; });
+    ackInsResetEntryFields(); ackInsModalMonthUpdate();
+  }
+  var ackInsAddEl = document.getElementById('ackInsModalAdd');
+  if(ackInsAddEl) ackInsAddEl.addEventListener('click', function(){
+    var c = ackInsCollectEntry(); if(c.error){ showToast(c.error, 'danger'); return; }
+    var dup = ackInsQueue.some(function(q){ var e = q.entry; return e.lcNo === c.entry.lcNo && e.coverNoteNo === c.entry.coverNoteNo && e.lcAdvSendDate === c.entry.lcAdvSendDate; });
+    if(dup){ showToast('This entry is already in the list', 'danger'); return; }
+    ackInsQueue.push(c); ackInsRenderQueue(); ackInsClearPopupForm();
+    showToast('Added to the list (' + ackInsQueue.length + ') — pick the next LC, or click Save to send them all', 'success');
+    var li = document.getElementById('ackInsModalLc'); if(li) li.focus();
+  });
+  function ackInsSaveMany(list){
+    if(ackInsSaving) return;
+    var bad = [].concat.apply([], list.map(function(q){ return q.files.map(function(f){ return docCheck(f.file); }); })).filter(Boolean)[0];
+    if(bad){ showToast('✗ ' + bad, 'danger'); return; }
+    ackInsSaving = true; var sv = document.getElementById('ackInsModalSave'); if(sv) sv.disabled = true;
+    var ok = 0, failed = [], p = Promise.resolve();
+    list.forEach(function(q){
+      p = p.then(function(){
+        var up = Promise.resolve();
+        q.files.forEach(function(f){ up = up.then(function(){ return docUploadOne(f.file, { lcNo: q.entry.lcNo, item: q.item, vessel: '', docName: f.docName, source: 'ack' }); }); });
+        return up.then(function(){ return backendCall({ action: 'saveAckEntry', entry: q.entry }); }).then(function(r){ if(r && r.success) ok++; else failed.push({ q: q, err: (r && r.error) || 'unknown error' }); });
+      }).catch(function(err){ failed.push({ q: q, err: err.message }); });
+    });
+    p.then(function(){
+      ackInsSaving = false; if(sv) sv.disabled = false;
+      ackInsQueue = failed.map(function(f){ return f.q; }); ackInsRenderQueue();
+      if(!failed.length){ ackInsCloseModal(); ackInsClearPopupForm(); showToast('✓ ' + ok + (ok === 1 ? ' entry' : ' entries') + ' saved and sent to the factory for acknowledgement', 'success'); }
+      else showToast('✗ ' + ok + ' saved, ' + failed.length + ' NOT saved (' + failed[0].q.entry.lcNo + ': ' + failed[0].err + ') — they stay in the list; fix and Save again', 'danger');
+      ackInsLoadMonthRows(); if(ackCurrentListType === 'insurance') loadAckList();
+    });
+  }
   var ackInsModalLcEl = document.getElementById('ackInsModalLc');
   if(ackInsModalLcEl){
-    ackInsModalLcEl.addEventListener('change', function(){ ackInsPickLc(ackInsModalLcEl.value.trim(), null); });
+    ackInsModalLcEl.addEventListener('change', function(){ var v = ackInsModalLcEl.value.trim(); if(v && v === val('ackIns_lcNo')) return; ackInsPickLc(v, null); });   // already picked (by the 'input' event): keep what was typed since
     ackInsModalLcEl.addEventListener('input', function(){   // picking from the list fires 'input' with the full LC No.
       var v = ackInsModalLcEl.value.trim();
-      if(v && (ackInsAllLcs.some(function(l){ return l.lcNo === v; }) || ackInsRows.some(function(r){ return r.lcNo === v; }))) ackInsPickLc(v, null);
+      if(v && v !== val('ackIns_lcNo') && (ackInsAllLcs.some(function(l){ return l.lcNo === v; }) || ackInsRows.some(function(r){ return r.lcNo === v; }))) ackInsPickLc(v, null);
     });
   }
   var ackInsNewBtnEl = document.getElementById('ackInsNewBtn');
   if(ackInsNewBtnEl) ackInsNewBtnEl.addEventListener('click', function(){ ackInsOpenModal(null); });
-  ['ackInsModalClose', 'ackInsModalCancel'].forEach(function(id){ var b = document.getElementById(id); if(b) b.addEventListener('click', function(){ ackInsCloseModal(); ackInsResetEntryFields(); }); });
+  ['ackInsModalClose', 'ackInsModalCancel'].forEach(function(id){ var b = document.getElementById(id); if(b) b.addEventListener('click', function(){
+    if(ackInsQueue.length && !window.confirm(ackInsQueue.length + ' entr' + (ackInsQueue.length === 1 ? 'y' : 'ies') + ' in the list will be discarded. Close anyway?')) return;
+    ackInsQueue = []; ackInsRenderQueue(); ackInsCloseModal(); ackInsResetEntryFields();
+  }); });
   var ackInsModalSaveEl = document.getElementById('ackInsModalSave');
-  if(ackInsModalSaveEl) ackInsModalSaveEl.addEventListener('click', function(){ var sb = document.getElementById('ackSaveBtn'); if(sb && !sb.disabled && !ackInsSaving) sb.click(); });   // same save as before (files first, then the entry)
+  if(ackInsModalSaveEl) ackInsModalSaveEl.addEventListener('click', function(){
+    if(ackInsQueue.length){                                  // entries lined up with Add to List (+ the one on screen, if it is filled in)
+      var pending = ackInsQueue.slice();
+      if(val('ackIns_lcNo')){ var c = ackInsCollectEntry(); if(c.error){ showToast(c.error + ' — or clear the LC No. to save only the entries in the list', 'danger'); return; } pending.push(c); }
+      ackInsSaveMany(pending); return;
+    }
+    var sb = document.getElementById('ackSaveBtn'); if(sb && !sb.disabled && !ackInsSaving) sb.click();   // single entry: same save as before (files first, then the entry)
+  });
   // the page's own Save ACK / Reset buttons belong to the Bill of Entry form — hidden while the LC Opening Advice & Insurance form is shown
   (function(){
     var f = document.getElementById('ackEntryForm-insurance'), foot = document.getElementById('ackFooterBtns'); if(!f || !foot) return;
